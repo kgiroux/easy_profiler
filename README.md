@@ -96,6 +96,8 @@ target_link_libraries(my_application easy_profiler)  # STEP 2 ##########
 
 ## Inserting blocks
 
+> 📘 A detailed guide of every macro, with use cases, real-time profiling advice and common pitfalls, is available in [docs/MACROS.md](docs/MACROS.md).
+
 Example of usage.
 
 ```cpp
