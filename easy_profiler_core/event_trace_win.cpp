@@ -63,6 +63,7 @@
 #include <easy/profiler.h>
 #include "profile_manager.h"
 #include "current_time.h"
+#include "tick_conversion.h"
 
 #include "event_trace_win.h"
 #include <Psapi.h>
@@ -209,6 +210,51 @@ static thread_process_info_map THREAD_PROCESS_INFO_TABLE;
 
 //////////////////////////////////////////////////////////////////////////
 
+/** Converts a raw ETW timestamp into the time base of profiler::clock::now().
+
+ETW is configured with RAW_TIMESTAMP_TIME_TYPE, so EVENT_HEADER::TimeStamp holds raw
+QueryPerformanceCounter ticks. When easy_profiler is built with a std::chrono clock
+(BUILD_WITH_CHRONO_STEADY_CLOCK / BUILD_WITH_CHRONO_HIGH_RESOLUTION_CLOCK), blocks are
+timestamped in chrono units (nanoseconds) instead, so context-switch events must be
+rescaled, otherwise both time bases get mixed in the same capture (issue #226).
+
+Steady std::chrono clocks on Windows (MSVC STL, libc++, libstdc++/winpthreads) are
+QPC-based with the same origin, so a rescale is enough. A non-steady clock (e.g.
+libstdc++/MinGW high_resolution_clock, which is system_clock with a 1970 epoch) has a
+different origin: a constant offset, measured once, is added in that case.
+*/
+static profiler::timestamp_t qpcToProfilerTicks(LONGLONG _qpcTicks)
+{
+    const auto ticks = static_cast<profiler::timestamp_t>(_qpcTicks);
+#ifdef EASY_CHRONO_CLOCK
+    using period = EASY_CHRONO_CLOCK::period;
+    static const uint64_t qpcFrequency = []() -> uint64_t {
+        LARGE_INTEGER freq{};
+        return QueryPerformanceFrequency(&freq) != FALSE ? static_cast<uint64_t>(freq.QuadPart) : 0ULL;
+    }();
+    const auto rescale = [](uint64_t qpc) -> uint64_t {
+        return profiler::detail::scale_ticks(qpc, static_cast<uint64_t>(period::den),
+                                             qpcFrequency * static_cast<uint64_t>(period::num));
+    };
+
+    const uint64_t scaled = rescale(ticks);
+    if (EASY_CHRONO_CLOCK::is_steady)
+        return static_cast<profiler::timestamp_t>(scaled);
+
+    static const int64_t originOffset = [&rescale]() -> int64_t {
+        LARGE_INTEGER qpc{};
+        QueryPerformanceCounter(&qpc);
+        const auto clockNow = static_cast<int64_t>(profiler::clock::now());
+        return clockNow - static_cast<int64_t>(rescale(static_cast<uint64_t>(qpc.QuadPart)));
+    }();
+    return static_cast<profiler::timestamp_t>(static_cast<int64_t>(scaled) + originOffset);
+#else
+    return ticks; // profiler::clock::now() already returns raw QPC ticks
+#endif
+}
+
+//////////////////////////////////////////////////////////////////////////
+
 void WINAPI easyProcessTraceEvent(PEVENT_RECORD _traceEvent)
 {
     if (_traceEvent->EventHeader.EventDescriptor.Opcode != SWITCH_CONTEXT_OPCODE)
@@ -220,7 +266,7 @@ void WINAPI easyProcessTraceEvent(PEVENT_RECORD _traceEvent)
     EASY_FUNCTION(EASY_COLOR_INTERNAL_EVENT, profiler::OFF);
 
     auto _contextSwitchEvent = reinterpret_cast<CSwitch*>(_traceEvent->UserData);
-    const auto time = static_cast<profiler::timestamp_t>(_traceEvent->EventHeader.TimeStamp.QuadPart);
+    const auto time = qpcToProfilerTicks(_traceEvent->EventHeader.TimeStamp.QuadPart);
     if (time > TRACING_END_TIME.load(std::memory_order_acquire))
         return;
 

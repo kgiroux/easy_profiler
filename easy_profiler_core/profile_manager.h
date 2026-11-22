@@ -55,6 +55,11 @@ The Apache License, Version 2.0 (the "License");
 #include "hashed_cstr.h"
 #include "thread_storage.h"
 
+// Must be included here (not only in .cpp files): it may define EASY_CHRONO_CLOCK,
+// which selects the type of ProfileManager::m_cpuFrequency below. Without it the class
+// layout would depend on the include order of each translation unit.
+#include "current_time.h"
+
 #include <atomic>
 #include <map>
 #include <ostream>

@@ -154,6 +154,7 @@ set(H_FILES
     thread_storage.h
     spin_lock.h
     stack_buffer.h
+    tick_conversion.h
 )
 
 set(EASY_INCLUDE_DIR "include/easy")

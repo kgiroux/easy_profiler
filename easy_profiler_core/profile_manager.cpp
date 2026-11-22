@@ -67,6 +67,7 @@
 
 #include "block_descriptor.h"
 #include "current_time.h"
+#include "tick_conversion.h"
 #include "current_thread.h"
 
 #ifdef __APPLE__
@@ -1288,24 +1289,32 @@ const char* ProfileManager::getContextSwitchLogFilename() const
 //////////////////////////////////////////////////////////////////////////
 
 #if defined(EASY_CHRONO_CLOCK) || defined(_WIN32)
+// m_cpuFrequency is expressed in Hz (ticks per second)
+static EASY_CONSTEXPR uint64_t NANOSECONDS_PER_SECOND  = 1000000000ULL;
+static EASY_CONSTEXPR uint64_t MICROSECONDS_PER_SECOND = 1000000ULL;
+
 profiler::timestamp_t ProfileManager::ticks2ns(profiler::timestamp_t ticks) const
 {
-    return static_cast<profiler::timestamp_t>(ticks * 1000000000LL / m_cpuFrequency);
+    return static_cast<profiler::timestamp_t>(profiler::detail::scale_ticks(ticks, NANOSECONDS_PER_SECOND, static_cast<uint64_t>(m_cpuFrequency)));
 }
 
 profiler::timestamp_t ProfileManager::ticks2us(profiler::timestamp_t ticks) const
 {
-    return static_cast<profiler::timestamp_t>(ticks * 1000000LL / m_cpuFrequency);
+    return static_cast<profiler::timestamp_t>(profiler::detail::scale_ticks(ticks, MICROSECONDS_PER_SECOND, static_cast<uint64_t>(m_cpuFrequency)));
 }
 #else
+// m_cpuFrequency is expressed in kHz (ticks per millisecond)
+static EASY_CONSTEXPR uint64_t NANOSECONDS_PER_MILLISECOND  = 1000000ULL;
+static EASY_CONSTEXPR uint64_t MICROSECONDS_PER_MILLISECOND = 1000ULL;
+
 profiler::timestamp_t ProfileManager::ticks2ns(profiler::timestamp_t ticks) const
 {
-    return static_cast<profiler::timestamp_t>(ticks * 1000000LL / m_cpuFrequency.load(std::memory_order_acquire));
+    return static_cast<profiler::timestamp_t>(profiler::detail::scale_ticks(ticks, NANOSECONDS_PER_MILLISECOND, static_cast<uint64_t>(m_cpuFrequency.load(std::memory_order_acquire))));
 }
 
 profiler::timestamp_t ProfileManager::ticks2us(profiler::timestamp_t ticks) const
 {
-    return static_cast<profiler::timestamp_t>(ticks * 1000 / m_cpuFrequency.load(std::memory_order_acquire));
+    return static_cast<profiler::timestamp_t>(profiler::detail::scale_ticks(ticks, MICROSECONDS_PER_MILLISECOND, static_cast<uint64_t>(m_cpuFrequency.load(std::memory_order_acquire))));
 }
 #endif
 
