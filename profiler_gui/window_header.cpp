@@ -50,6 +50,7 @@
 
 #include "globals.h"
 #include "window_header.h"
+#include "qt_compat.h"
 #include <QApplication>
 #include <QHBoxLayout>
 #include <QLabel>
@@ -333,7 +334,7 @@ void WindowHeader::showEvent(QShowEvent* event)
     if (!m_pixmap->windowIcon().isNull())
     {
         const int size = std::max(m_title->fontMetrics().height(), 16);
-        if (m_pixmap->pixmap().height() != size)
+        if (profiler_gui::labelPixmap(*m_pixmap).height() != size)
             m_pixmap->setPixmap(m_pixmap->windowIcon().pixmap(size, size));
     }
 

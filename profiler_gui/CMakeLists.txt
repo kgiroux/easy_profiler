@@ -4,10 +4,33 @@ set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 set(CMAKE_INCLUDE_CURRENT_DIR ON)
 
-find_package(Qt6Widgets)
+# Qt selection: EASY_PROFILER_QT_VERSION = 5 or 6 forces a major version,
+# empty (default) auto-detects with Qt6 preferred over Qt5.
+set(EASY_PROFILER_QT_VERSION "" CACHE STRING "Qt major version used by profiler_gui (5, 6 or empty for auto-detection)")
+set_property(CACHE EASY_PROFILER_QT_VERSION PROPERTY STRINGS "" 5 6)
 
-if (Qt6Widgets_FOUND)
-    message(STATUS "Using Qt v${Qt6Widgets_VERSION}")
+if (EASY_PROFILER_QT_VERSION)
+    set(_easy_qt_candidates Qt${EASY_PROFILER_QT_VERSION})
+else ()
+    set(_easy_qt_candidates Qt6 Qt5)
+endif ()
+
+find_package(QT NAMES ${_easy_qt_candidates} COMPONENTS Widgets QUIET)
+if (QT_FOUND)
+    find_package(Qt${QT_VERSION_MAJOR} COMPONENTS Widgets QUIET)
+endif ()
+
+set(_easy_qt_ok FALSE)
+if (QT_FOUND AND Qt${QT_VERSION_MAJOR}Widgets_FOUND)
+    if (QT_VERSION_MAJOR EQUAL 5 AND Qt5Widgets_VERSION VERSION_LESS "5.12")
+        message(WARNING "profiler_gui requires Qt >= 5.12 (found ${Qt5Widgets_VERSION}). GUI will not be built.")
+    else ()
+        set(_easy_qt_ok TRUE)
+    endif ()
+endif ()
+
+if (_easy_qt_ok)
+    message(STATUS "Using Qt v${Qt${QT_VERSION_MAJOR}Widgets_VERSION}")
     if (NOT("${CMAKE_BUILD_TYPE}" STREQUAL "Debug") AND WIN32)
         set(APPLICATION_PLATFORM WIN32)
     endif ()
@@ -67,10 +90,13 @@ if (Qt6Widgets_FOUND)
         tree_widget_loader.cpp
         window_header.h
         window_header.cpp
+        qt_compat.h
         resources.qrc
         resources.rc
     )
-    target_link_libraries(profiler_gui Qt6::Widgets easy_profiler)
+    target_link_libraries(profiler_gui Qt${QT_VERSION_MAJOR}::Widgets easy_profiler)
+    # The GUI code uses C++17 (structured bindings). Qt6 imposes it implicitly, Qt5 does not.
+    target_compile_features(profiler_gui PRIVATE cxx_std_17)
     if (WIN32)
         target_compile_definitions(profiler_gui PRIVATE -D_WIN32_WINNT=0x0600)
     endif ()
@@ -88,6 +114,6 @@ if (Qt6Widgets_FOUND)
 
     set_property(TARGET profiler_gui PROPERTY INSTALL_RPATH_USE_LINK_PATH TRUE)
 else ()
-    message(STATUS "INFO\n\n\tQt6 not found! Generating EasyProfiler projects without GUI.\n")
+    message(STATUS "INFO\n\n\tQt5 (>= 5.12) / Qt6 not found! Generating EasyProfiler projects without GUI.\n")
 endif ()
 

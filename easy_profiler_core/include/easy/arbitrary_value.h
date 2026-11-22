@@ -43,6 +43,7 @@ The Apache License, Version 2.0 (the "License");
 #ifndef EASY_PROFILER_ARBITRARY_VALUE_H
 #define EASY_PROFILER_ARBITRARY_VALUE_H
 
+#include <string> // std::string is used by setText() overloads (issue #181)
 #include <easy/details/arbitrary_value_public_types.h>
 
 //

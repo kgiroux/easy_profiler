@@ -514,7 +514,7 @@ void RoundProgressIndicator::paintEvent(QPaintEvent* /*event*/)
     {
         // Draw text
         p.setWidth(px(1));
-        p.setColor(palette().window().color());
+        p.setColor(palette().windowText().color()); // text color (Qt5 "foreground"), not the background
         painter.setPen(p);
         painter.setFont(font());
         painter.drawText(r, Qt::AlignCenter, m_text);
@@ -555,7 +555,7 @@ void RoundProgressIndicator::paintStopButton(QPainter& painter, QRect& r)
     painter.drawRect(r);
 }
 
-void RoundProgressIndicator::enterEvent(QEnterEvent* event) {
+void RoundProgressIndicator::enterEvent(profiler_gui::EnterEvent* event) {
     Parent::enterEvent(event);
     profiler_gui::updateProperty(this, "hover", true);
 }

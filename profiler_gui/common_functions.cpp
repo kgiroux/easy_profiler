@@ -91,8 +91,8 @@ static QString arrayToString(const profiler::ArbitraryValue& _serializedValue, i
             return value ? QStringLiteral("true") : QStringLiteral("false");
         }
 
-        case profiler::DataType::Char:   return QChar(_serializedValue.toArray<char>  ()->at(_index));
-        case profiler::DataType::Int8:   return QChar(_serializedValue.toArray<int8_t>()->at(_index));
+        case profiler::DataType::Char:   return QChar::fromLatin1(_serializedValue.toArray<char>()->at(_index));
+        case profiler::DataType::Int8:   return QChar::fromLatin1(static_cast<char>(_serializedValue.toArray<int8_t>()->at(_index)));
         case profiler::DataType::Uint8:  return toString<uint8_t> (_serializedValue, _index);
         case profiler::DataType::Int16:  return toString<int16_t> (_serializedValue, _index);
         case profiler::DataType::Uint16: return toString<uint16_t>(_serializedValue, _index);
@@ -102,7 +102,7 @@ static QString arrayToString(const profiler::ArbitraryValue& _serializedValue, i
         case profiler::DataType::Uint64: return toString<uint64_t>(_serializedValue, _index);
         case profiler::DataType::Float:  return toString<float>   (_serializedValue, _index);
         case profiler::DataType::Double: return toString<double>  (_serializedValue, _index);
-        case profiler::DataType::String: return QChar(_serializedValue.data()[_index]);
+        case profiler::DataType::String: return QChar::fromLatin1(_serializedValue.data()[_index]);
         default: return QStringLiteral("??");
     }
 }
@@ -112,8 +112,8 @@ static QString singleValueToString(const profiler::ArbitraryValue& _serializedVa
     switch (_serializedValue.type())
     {
         case profiler::DataType::Bool:   return _serializedValue.toValue<bool>()->value() ? QStringLiteral("true") : QStringLiteral("false");
-        case profiler::DataType::Char:   return QChar(_serializedValue.toValue<char>  ()->value());
-        case profiler::DataType::Int8:   return QChar(_serializedValue.toValue<int8_t>()->value());
+        case profiler::DataType::Char:   return QChar::fromLatin1(_serializedValue.toValue<char>()->value());
+        case profiler::DataType::Int8:   return QChar::fromLatin1(static_cast<char>(_serializedValue.toValue<int8_t>()->value()));
         case profiler::DataType::Uint8:  return toString<uint8_t> (_serializedValue);
         case profiler::DataType::Int16:  return toString<int16_t> (_serializedValue);
         case profiler::DataType::Uint16: return toString<uint16_t>(_serializedValue);

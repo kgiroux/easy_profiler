@@ -48,6 +48,7 @@ The Apache License, Version 2.0 (the "License");
 #include <easy/utility.h>
 #include "graphics_slider_area.h"
 #include "globals.h"
+#include "qt_compat.h"
 
 //////////////////////////////////////////////////////////////////////////
 
@@ -566,12 +567,12 @@ void GraphicsSliderArea::wheelEvent(QWheelEvent* _event)
     if (!bindMode())
     {
         const auto w = m_slider->halfwidth() * (_event->angleDelta().y() < 0 ? profiler_gui::SCALING_COEFFICIENT : profiler_gui::SCALING_COEFFICIENT_INV);
-        setValue(mapToScene(_event->position().toPoint()).x() - m_minimumValue - w);
+        setValue(mapToScene(profiler_gui::wheelPosition(*_event).toPoint()).x() - m_minimumValue - w);
         emit EASY_GLOBALS.events.chartWheeled(m_value + w * m_windowScale, _event->angleDelta().y());
     }
     else
     {
-        auto x = static_cast<qreal>(_event->position().x()) / m_windowScale;
+        auto x = static_cast<qreal>(profiler_gui::wheelPosition(*_event).x()) / m_windowScale;
         if (m_bBindMode) // check m_bBindMode because it may differ from bindMode() for arbitrary value complexity chart
             x *= sliderWidth() / range();
         emit EASY_GLOBALS.events.chartWheeled(m_value + x, _event->angleDelta().y());

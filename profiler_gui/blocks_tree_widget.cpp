@@ -1645,7 +1645,7 @@ void StatsWidget::saveSettings()
     settings.endGroup();
 }
 
-void StatsWidget::enterEvent(QEnterEvent* event)
+void StatsWidget::enterEvent(profiler_gui::EnterEvent* event)
 {
     Parent::enterEvent(event);
     m_tree->updateHintLabelOnHover(true);

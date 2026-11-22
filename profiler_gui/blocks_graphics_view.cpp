@@ -1291,7 +1291,7 @@ void BlocksGraphicsView::scaleTo(qreal _scale)
 
 //////////////////////////////////////////////////////////////////////////
 
-void BlocksGraphicsView::enterEvent(QEnterEvent* _event)
+void BlocksGraphicsView::enterEvent(profiler_gui::EnterEvent* _event)
 {
     Parent::enterEvent(_event);
     m_bHovered = true;
@@ -1326,7 +1326,7 @@ void BlocksGraphicsView::wheelEvent(QWheelEvent* _event)
     m_idleTime = 0;
 
     if (!m_bEmpty)
-        onWheel(mapToDiagram(mapToScene(_event->position().toPoint()).x()), _event->angleDelta().y());
+        onWheel(mapToDiagram(mapToScene(profiler_gui::wheelPosition(*_event).toPoint()).x()), _event->angleDelta().y());
 
     _event->accept();
 }
@@ -3266,7 +3266,7 @@ void ThreadNamesWidget::repaintScene()
     scene()->update();
 }
 
-void ThreadNamesWidget::enterEvent(QEnterEvent* _event)
+void ThreadNamesWidget::enterEvent(profiler_gui::EnterEvent* _event)
 {
     Parent::enterEvent(_event);
     m_bHovered = true;

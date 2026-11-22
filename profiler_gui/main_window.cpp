@@ -85,8 +85,12 @@
 #include <QLabel>
 #include <QLineEdit>
 #include <QPushButton>
-#include <QStringConverter>
-#include <QStringDecoder>
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+# include <QStringConverter>
+# include <QStringDecoder>
+#else
+# include <QTextCodec>
+#endif
 #include <QPlainTextEdit>
 #include <QTextStream>
 #include <QToolBar>
@@ -878,7 +882,28 @@ MainWindow::MainWindow() : Parent(), m_theme("default"), m_lastAddress("localhos
     {
         QList<QAction*> actions;
 
-        for (const QString& codec : QStringConverter::availableCodecs())
+#if QT_VERSION >= QT_VERSION_CHECK(6, 7, 0)
+        const QStringList codecs = QStringConverter::availableCodecs();
+#elif QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
+        // Qt 5: one entry per codec (availableCodecs() would also list every alias).
+        QStringList codecs;
+        for (const int mib : QTextCodec::availableMibs())
+        {
+            if (const QTextCodec* textCodec = QTextCodec::codecForMib(mib))
+                codecs.push_back(QString::fromLatin1(textCodec->name()));
+        }
+        codecs.removeDuplicates();
+#else
+        // QStringConverter::availableCodecs() appeared in Qt 6.7: fall back to built-in encodings.
+        QStringList codecs;
+        for (int e = 0; e <= static_cast<int>(QStringConverter::LastEncoding); ++e)
+        {
+            if (const char* name = QStringConverter::nameForEncoding(static_cast<QStringConverter::Encoding>(e)))
+                codecs.push_back(QString::fromLatin1(name));
+        }
+#endif
+
+        for (const QString& codec : codecs)
         {
             action = new QAction(codec, actionGroup);
             action->setData(codec);
@@ -1856,10 +1881,12 @@ void MainWindow::loadSettings()
         EASY_GLOBALS.enable_statistics = flag.toBool();
 
     QString encoding = settings.value("encoding", "UTF-8").toString();
-    QStringDecoder decoder(encoding.toUtf8().constData());
-    EASY_GLOBALS.text_encoding = decoder.isValid()
-        ? encoding
-        : QStringConverter::nameForEncoding(QStringConverter::Utf8);
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+    const bool isValidEncoding = QStringDecoder(encoding.toUtf8().constData()).isValid();
+#else
+    const bool isValidEncoding = QTextCodec::codecForName(encoding.toUtf8()) != nullptr;
+#endif
+    EASY_GLOBALS.text_encoding = isValidEncoding ? encoding : QStringLiteral("UTF-8");
 
     auto theme = settings.value("theme");
     if (theme.isValid())

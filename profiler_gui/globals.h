@@ -58,8 +58,12 @@
 #include <string>
 #include <QObject>
 #include <QColor>
-#include <QStringDecoder>
-#include <QStringConverter>
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+# include <QStringDecoder>
+# include <QStringConverter>
+#else
+# include <QTextCodec>
+#endif
 #include <QSize>
 #include <QFont>
 #include "common_functions.h"
@@ -268,10 +272,18 @@ namespace profiler_gui {
     template <class T>
     inline QString toUnicode(const T& _inputString)
     {
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
         QStringDecoder decoder(Globals::instance().text_encoding.toUtf8().constData());
         if (!decoder.isValid())
             decoder = QStringDecoder(QStringDecoder::Utf8);
         return decoder.decode(QByteArray(_inputString));
+#else
+        // QTextCodec::codecForName() caches codecs internally, so this lookup is cheap.
+        QTextCodec* codec = QTextCodec::codecForName(Globals::instance().text_encoding.toUtf8());
+        if (codec == nullptr)
+            codec = QTextCodec::codecForName("UTF-8");
+        return codec->toUnicode(QByteArray(_inputString));
+#endif
     }
 
     //////////////////////////////////////////////////////////////////////////

@@ -68,6 +68,7 @@
 
 #include "tree_widget_loader.h"
 #include "tree_widget_item.h"
+#include "qt_compat.h"
 
 #include <easy/reader.h>
 
@@ -211,7 +212,7 @@ public:
     explicit StatsWidget(QWidget* _parent = nullptr);
     ~StatsWidget() override;
 
-    void enterEvent(QEnterEvent* event) override;
+    void enterEvent(profiler_gui::EnterEvent* event) override;
     void leaveEvent(QEvent* event) override;
     void keyPressEvent(QKeyEvent* _event) override;
     void contextMenuEvent(QContextMenuEvent* _event) override;
