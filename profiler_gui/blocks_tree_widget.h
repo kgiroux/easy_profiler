@@ -155,6 +155,8 @@ private slots:
     void onCollapseAllChildrenClicked(bool);
 
     void onExpandAllChildrenClicked(bool);
+    void onSetBudgetClicked(bool);
+    void onClearBudgetClicked(bool);
 
     void onItemExpand(QTreeWidgetItem* _item);
     void onItemCollapse(QTreeWidgetItem* _item);
@@ -168,6 +170,8 @@ private slots:
     void onBlockStatusChangeClicked(bool);
 
     void resizeColumnsToContents();
+    void applyBudget(const std::string& _blockName, ::profiler_gui::budget_ns_t _budgetNs);
+    void refreshBudgetColors();
 
     void onHideShowColumn(bool);
     void onModeChange(bool);

@@ -63,6 +63,7 @@
 #include <easy/reader.h>
 #include "common_types.h"
 #include "thread_pool_task.h"
+#include "block_budget.h"
 
 //////////////////////////////////////////////////////////////////////////
 
@@ -112,6 +113,7 @@ class TreeWidgetLoader Q_DECL_FINAL
     std::atomic<int>     m_progress; ///<
     TreeMode                 m_mode; ///<
     size_t              m_plainRows = 0; ///< Rows created so far by the per-frame builder (worker thread only)
+    std::vector<::profiler_gui::budget_ns_t> m_budgets; ///< Copy of the budget table for the worker thread
 
 public:
 

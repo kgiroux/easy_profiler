@@ -69,6 +69,7 @@
 #include <QDebug>
 #include <QHBoxLayout>
 #include <QHeaderView>
+#include <QInputDialog>
 #include <QLabel>
 #include <QLineEdit>
 #include <QMenu>
@@ -916,6 +917,25 @@ void BlocksTreeWidget::contextMenuEvent(QContextMenuEvent* _event)
             action = menu.addAction("Collapse All Children");
             connect(action, &QAction::triggered, this, &This::onCollapseAllChildrenClicked);
             action->setIcon(QIcon(imagePath("collapse")));
+
+            if (item->parent() != nullptr) // a block row, not a thread row
+            {
+                menu.addSeparator();
+
+                const auto& desc = easyDescriptor(item->block().node->id());
+                const auto budget = EASY_GLOBALS.block_budgets.get(desc.name());
+
+                action = menu.addAction(budget == profiler_gui::NO_BUDGET ? "Set Time Budget..." : "Change Time Budget...");
+                action->setToolTip("Blocks of this type lasting longer than the budget are displayed in red");
+                connect(action, &QAction::triggered, this, &This::onSetBudgetClicked);
+
+                if (budget != profiler_gui::NO_BUDGET)
+                {
+                    action = menu.addAction(QString("Clear Time Budget (%1)")
+                        .arg(profiler_gui::timeStringRealNs(EASY_GLOBALS.time_units, budget, 3)));
+                    connect(action, &QAction::triggered, this, &This::onClearBudgetClicked);
+                }
+            }
         }
 
         menu.addSeparator();
@@ -1245,6 +1265,63 @@ void BlocksTreeWidget::onExpandAllClicked(bool)
 
         emit EASY_GLOBALS.events.itemsExpandStateChanged();
     }
+}
+
+void BlocksTreeWidget::onSetBudgetClicked(bool)
+{
+    auto item = static_cast<TreeWidgetItem*>(currentItem());
+    if (item == nullptr || item->parent() == nullptr)
+        return;
+
+    const auto& desc = easyDescriptor(item->block().node->id());
+    const std::string name = desc.name();
+    const auto current = EASY_GLOBALS.block_budgets.get(name);
+
+    // Default proposal: the current budget, else the duration of the selected block
+    const double proposal = profiler_gui::budgetToMicroseconds(
+        current != profiler_gui::NO_BUDGET ? current : item->block().node->duration());
+
+    bool ok = false;
+    const double us = QInputDialog::getDouble(this, "Time budget",
+        QString("Maximum duration of \"%1\" blocks, in microseconds:").arg(profiler_gui::toUnicode(desc.name())),
+        proposal, 0.001, profiler_gui::MAX_BUDGET_US, 3, &ok);
+    if (!ok)
+        return;
+
+    applyBudget(name, profiler_gui::budgetFromMicroseconds(us));
+}
+
+void BlocksTreeWidget::onClearBudgetClicked(bool)
+{
+    auto item = static_cast<TreeWidgetItem*>(currentItem());
+    if (item == nullptr || item->parent() == nullptr)
+        return;
+
+    applyBudget(easyDescriptor(item->block().node->id()).name(), profiler_gui::NO_BUDGET);
+}
+
+void BlocksTreeWidget::applyBudget(const std::string& _blockName, profiler_gui::budget_ns_t _budgetNs)
+{
+    EASY_GLOBALS.block_budgets.set(_blockName, _budgetNs);
+    EASY_GLOBALS.rebuildBudgetTable();
+    refreshBudgetColors();
+    emit EASY_GLOBALS.events.refreshRequired(); // repaint the diagram with the new colors
+}
+
+void BlocksTreeWidget::refreshBudgetColors()
+{
+    // Only call-stack rows stand for one single block; aggregated rows are left unchanged.
+    if (m_mode != TreeMode::Full)
+        return;
+
+    for (auto& it : m_items)
+    {
+        auto item = it.second;
+        const auto& block = item->block();
+        item->setBackgroundColor(profiler_gui::blockDisplayColor(block, easyDescriptor(block.node->id()).color()));
+    }
+
+    viewport()->update();
 }
 
 void BlocksTreeWidget::onCollapseAllChildrenClicked(bool)

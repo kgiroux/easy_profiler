@@ -68,6 +68,7 @@
 #include <QFont>
 #include "common_functions.h"
 #include "globals_qobjects.h"
+#include "block_budget.h"
 
 //////////////////////////////////////////////////////////////////////////
 //////////////////////////////////////////////////////////////////////////
@@ -86,6 +87,7 @@ namespace profiler_gui {
     EASY_CONSTEXPR QRgb BLOCK_BORDER_COLOR = profiler::colors::Grey600 & 0x00ffffff;
     EASY_CONSTEXPR QRgb SELECTED_THREAD_BACKGROUND = 0xffe0e060;
     EASY_CONSTEXPR QRgb SELECTED_THREAD_FOREGROUND = 0xffffffff - (SELECTED_THREAD_BACKGROUND & 0x00ffffff);
+    EASY_CONSTEXPR QRgb OVER_BUDGET_COLOR = profiler::colors::Red; ///< Fill of a block lasting longer than its time budget
 
     EASY_CONSTEXPR qreal SCALING_COEFFICIENT = 1.25;
     EASY_CONSTEXPR qreal SCALING_COEFFICIENT_INV = 1.0 / SCALING_COEFFICIENT;
@@ -203,6 +205,8 @@ namespace profiler_gui {
         ::profiler::descriptors_list_t       descriptors; ///< Profiler block descriptors list
         ::profiler::bookmarks_t                bookmarks; ///< User bookmarks
         EasyBlocks                            gui_blocks; ///< Profiler graphics blocks builded by GUI
+        BlockBudgets                       block_budgets; ///< Time budget per block name (persisted in settings)
+        std::vector<budget_ns_t>           budget_by_id; ///< block_budgets resolved per block id (see rebuildBudgetTable())
 
         QString                                    theme; ///< Current UI theme name
         QString                            text_encoding; ///< Selected text encoding for profile block names
@@ -263,11 +267,26 @@ namespace profiler_gui {
 
         static Globals& instance();
 
+        /// Re-resolves block_budgets per block id. Call after `descriptors` or `block_budgets` changed.
+        void rebuildBudgetTable();
+
     private:
 
         Globals();
 
     }; // END of struct Globals.
+
+    /// Budget of a block (NO_BUDGET if none). `node->id()` is used, so run-time named blocks are covered too.
+    inline budget_ns_t blockBudget(const profiler::BlocksTree& _block)
+    {
+        return budgetOf(Globals::instance().budget_by_id, _block.node->id());
+    }
+
+    /// Fill color of a block: OVER_BUDGET_COLOR when it lasts longer than its budget, else its own color.
+    inline profiler::color_t blockDisplayColor(const profiler::BlocksTree& _block, profiler::color_t _ownColor)
+    {
+        return isOverBudget(_block.node->duration(), blockBudget(_block)) ? OVER_BUDGET_COLOR : _ownColor;
+    }
 
     template <class T>
     inline QString toUnicode(const T& _inputString)

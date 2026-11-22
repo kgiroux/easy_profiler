@@ -2485,6 +2485,19 @@ void BlocksGraphicsView::onIdleTimeout()
                                    row, 1, 1, 3, Qt::AlignLeft);
                     ++row;
 
+                    const auto budget = profiler_gui::blockBudget(itemBlock);
+                    if (budget != profiler_gui::NO_BUDGET)
+                    {
+                        const auto budgetText = profiler_gui::timeStringRealNs(EASY_GLOBALS.time_units, budget, 3);
+                        lay->addWidget(new QLabel("Budget:", widget), row, 0, Qt::AlignRight);
+                        lay->addWidget(new QLabel(profiler_gui::isOverBudget(duration, budget)
+                                                      ? QString("%1 (exceeded by %2)").arg(budgetText)
+                                                            .arg(profiler_gui::timeStringRealNs(EASY_GLOBALS.time_units, duration - budget, 3))
+                                                      : budgetText, widget),
+                                       row, 1, 1, 3, Qt::AlignLeft);
+                        ++row;
+                    }
+
                     break;
                 }
 

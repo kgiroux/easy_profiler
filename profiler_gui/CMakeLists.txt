@@ -91,6 +91,8 @@ if (_easy_qt_ok)
         window_header.h
         window_header.cpp
         qt_compat.h
+        min_scale.h
+        block_budget.h
         resources.qrc
         resources.rc
     )

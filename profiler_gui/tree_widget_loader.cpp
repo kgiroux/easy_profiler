@@ -344,6 +344,7 @@ void TreeWidgetLoader::fillTreeBlocks(
 ) {
     interrupt();
     m_mode = _mode;
+    m_budgets = EASY_GLOBALS.budget_by_id; // the worker reads this copy, never the global table
 
     const auto zeroBlocks = EASY_GLOBALS.add_zero_blocks_to_hierarchy;
     const auto decoratedNames = EASY_GLOBALS.use_decorated_thread_name;
@@ -586,7 +587,9 @@ void TreeWidgetLoader::setTreeInternalTop(
             item->setText(COL_PERCENT_SUM_PER_THREAD, "");
         }
 
-        const auto color = easyDescriptor(gui_block.tree.node->id()).color();
+        auto color = easyDescriptor(gui_block.tree.node->id()).color();
+        if (profiler_gui::isOverBudget(duration, profiler_gui::budgetOf(m_budgets, tree.node->id())))
+            color = profiler_gui::OVER_BUDGET_COLOR;
         item->setBackgroundColor(color);
 
         size_t children_items_number = 0;
@@ -1306,7 +1309,8 @@ size_t TreeWidgetLoader::setTreeInternal(
             item->setData(COL_PERCENT_SUM_PER_THREAD, Qt::UserRole, 0);
         }
 
-        item->setBackgroundColor(desc.color());
+        item->setBackgroundColor(profiler_gui::isOverBudget(duration, profiler_gui::budgetOf(m_budgets, child.node->id()))
+                                 ? profiler_gui::OVER_BUDGET_COLOR : desc.color());
 
         size_t children_items_number = 0;
         profiler::timestamp_t children_duration = 0;

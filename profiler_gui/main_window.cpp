@@ -1381,6 +1381,7 @@ void MainWindow::clear()
     profiler_gui::set_max(EASY_GLOBALS.selected_block_id);
     EASY_GLOBALS.profiler_blocks.clear();
     EASY_GLOBALS.descriptors.clear();
+    EASY_GLOBALS.rebuildBudgetTable();
     EASY_GLOBALS.gui_blocks.clear();
 
     m_serializedBlocks.clear();
@@ -1880,6 +1881,13 @@ void MainWindow::loadSettings()
     if (!flag.isNull())
         EASY_GLOBALS.enable_statistics = flag.toBool();
 
+    // Time budgets per block name: {name: budget in ns}
+    EASY_GLOBALS.block_budgets.clear();
+    const auto budgets = settings.value("block_budgets").toMap();
+    for (auto it = budgets.cbegin(); it != budgets.cend(); ++it)
+        EASY_GLOBALS.block_budgets.set(it.key().toStdString(), it.value().toULongLong());
+    EASY_GLOBALS.rebuildBudgetTable();
+
     QString encoding = settings.value("encoding", "UTF-8").toString();
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
     const bool isValidEncoding = QStringDecoder(encoding.toUtf8().constData()).isValid();
@@ -1989,6 +1997,11 @@ void MainWindow::saveSettingsAndGeometry()
     settings.setValue("use_custom_window_header", EASY_GLOBALS.use_custom_window_header);
     settings.setValue("is_right_window_header_controls", EASY_GLOBALS.is_right_window_header_controls);
     settings.setValue("encoding", EASY_GLOBALS.text_encoding);
+
+    QVariantMap budgets;
+    for (const auto& budget : EASY_GLOBALS.block_budgets.all())
+        budgets.insert(QString::fromStdString(budget.first), QVariant::fromValue<qulonglong>(budget.second));
+    settings.setValue("block_budgets", budgets);
     settings.setValue("theme", m_theme);
 
     settings.endGroup();
@@ -2332,6 +2345,7 @@ void MainWindow::onLoadingFinish(profiler::block_index_t& _nblocks)
         profiler_gui::set_max(EASY_GLOBALS.selected_block_id);
         EASY_GLOBALS.profiler_blocks.swap(threads_map);
         EASY_GLOBALS.descriptors.swap(descriptors);
+        EASY_GLOBALS.rebuildBudgetTable();
         EASY_GLOBALS.bookmarks.swap(bookmarks);
 
         EASY_GLOBALS.gui_blocks.clear();
@@ -2775,6 +2789,7 @@ void MainWindow::onGetBlockDescriptionsClicked(bool)
                 if (!cancel)
                 {
                     EASY_GLOBALS.descriptors.swap(descriptors);
+                    EASY_GLOBALS.rebuildBudgetTable();
                     m_serializedDescriptors.swap(serializedDescriptors);
                     m_descriptorsNumberInFile = static_cast<uint32_t>(EASY_GLOBALS.descriptors.size());
 

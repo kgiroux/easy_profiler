@@ -261,11 +261,12 @@ void GraphicsBlockItem::paintChildren(const float _minWidth, const int _narrowSi
             if (item.block == EASY_GLOBALS.selected_block)
                 p.selectedItemsWasPainted = true;
 
-            const bool colorChange = (p.previousColor != itemDesc.color());
+            const auto fillColor = ::profiler_gui::blockDisplayColor(itemBlock.tree, itemDesc.color()); // red when over budget
+            const bool colorChange = (p.previousColor != fillColor);
             if (colorChange)
             {
                 // Set background color brush for rectangle
-                p.previousColor = itemDesc.color();
+                p.previousColor = fillColor;
                 //p.inverseColor = 0xffffffff - p.previousColor;
                 p.is_light = ::profiler_gui::isLightColor(p.previousColor);
                 p.textColor = ::profiler_gui::textColorForFlag(p.is_light);
@@ -339,11 +340,12 @@ void GraphicsBlockItem::paintChildren(const float _minWidth, const int _narrowSi
             if (item.block == EASY_GLOBALS.selected_block)
                 p.selectedItemsWasPainted = true;
 
-            const bool colorChange = (p.previousColor != itemDesc.color());
+            const auto fillColor = ::profiler_gui::blockDisplayColor(itemBlock.tree, itemDesc.color()); // red when over budget
+            const bool colorChange = (p.previousColor != fillColor);
             if (colorChange)
             {
                 // Set background color brush for rectangle
-                p.previousColor = itemDesc.color();
+                p.previousColor = fillColor;
                 //p.inverseColor = 0xffffffff - p.previousColor;
                 p.is_light = ::profiler_gui::isLightColor(p.previousColor);
                 p.textColor = ::profiler_gui::textColorForFlag(p.is_light);
@@ -666,11 +668,12 @@ void GraphicsBlockItem::paint(QPainter* _painter, const QStyleOptionGraphicsItem
                     if (item.block == EASY_GLOBALS.selected_block)
                         p.selectedItemsWasPainted = true;
 
-                    const bool colorChange = (p.previousColor != itemDesc.color());
+                    const auto fillColor = ::profiler_gui::blockDisplayColor(itemBlock.tree, itemDesc.color()); // red when over budget
+                    const bool colorChange = (p.previousColor != fillColor);
                     if (colorChange)
                     {
                         // Set background color brush for rectangle
-                        p.previousColor = itemDesc.color();
+                        p.previousColor = fillColor;
                         //p.inverseColor = 0xffffffff - p.previousColor;
                         p.is_light = ::profiler_gui::isLightColor(p.previousColor);
                         p.textColor = ::profiler_gui::textColorForFlag(p.is_light);
@@ -743,11 +746,12 @@ void GraphicsBlockItem::paint(QPainter* _painter, const QStyleOptionGraphicsItem
                     if (item.block == EASY_GLOBALS.selected_block)
                         p.selectedItemsWasPainted = true;
 
-                    const bool colorChange = (p.previousColor != itemDesc.color());
+                    const auto fillColor = ::profiler_gui::blockDisplayColor(itemBlock.tree, itemDesc.color()); // red when over budget
+                    const bool colorChange = (p.previousColor != fillColor);
                     if (colorChange)
                     {
                         // Set background color brush for rectangle
-                        p.previousColor = itemDesc.color();
+                        p.previousColor = fillColor;
                         //p.inverseColor = 0xffffffff - p.previousColor;
                         p.is_light = ::profiler_gui::isLightColor(p.previousColor);
                         p.textColor = ::profiler_gui::textColorForFlag(p.is_light);

@@ -67,6 +67,14 @@ Globals& Globals::instance()
     return globals;
 }
 
+void Globals::rebuildBudgetTable()
+{
+    budget_by_id = block_budgets.buildTable(descriptors.size(), [this](size_t id) -> const char* {
+        const auto desc = descriptors[id];
+        return desc != nullptr ? desc->name() : nullptr;
+    });
+}
+
 Globals::Fonts::Fonts()
     : default_font(::profiler_gui::EFont("DejaVu Sans", 13))
     , background(::profiler_gui::EFont("DejaVu Sans", 13, QFont::Bold))
