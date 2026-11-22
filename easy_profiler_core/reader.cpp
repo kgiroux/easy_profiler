@@ -51,6 +51,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <cstring>
 #include <condition_variable>
 #include <deque>
 #include <fstream>
@@ -669,6 +670,80 @@ static void read(std::istream& inStream, T& value)
     read(inStream, (char*)&value, sizeof(T));
 }
 
+//////////////////////////////////////////////////////////////////////////
+// Validation helpers: a corrupted or truncated .prof file must be rejected with a message,
+// never read past a buffer (the data comes from the file and cannot be trusted).
+
+/// Reads exactly `size` bytes. Returns false if the stream ended before (truncated file).
+static bool readExact(std::istream& inStream, char* value, size_t size)
+{
+    inStream.read(value, static_cast<std::streamsize>(size));
+    return static_cast<size_t>(inStream.gcount()) == size;
+}
+
+/// True if a '\0' exists in the first `maxLength` bytes of `str`.
+static bool hasTerminator(const char* str, size_t maxLength)
+{
+    return maxLength != 0 && std::memchr(str, 0, maxLength) != nullptr;
+}
+
+/// Bytes left in a seekable stream; max() when unknown (e.g. a network stream).
+static uint64_t remainingBytes(std::istream& inStream)
+{
+    const auto unknown = std::numeric_limits<uint64_t>::max();
+    const auto current = inStream.tellg();
+    if (current == std::istream::pos_type(-1))
+        return unknown;
+
+    inStream.seekg(0, std::ios::end);
+    const auto end = inStream.tellg();
+    inStream.clear();
+    inStream.seekg(current);
+
+    if (end == std::istream::pos_type(-1) || end < current)
+        return unknown;
+    return static_cast<uint64_t>(end - current);
+}
+
+/// A serialized descriptor = BaseBlockDescriptor + uint16 name length + name + '\0' + file + '\0'.
+static bool isValidDescriptor(const profiler::SerializedBlockDescriptor* desc, uint16_t sz)
+{
+    const size_t headerSize = sizeof(profiler::BaseBlockDescriptor) + sizeof(uint16_t);
+    if (sz <= headerSize)
+        return false;
+
+    const auto nameLength = static_cast<size_t>(desc->file() - desc->name());
+    if (nameLength == 0 || headerSize + nameLength >= sz)
+        return false; // name must be terminated and leave room for the file name
+
+    return desc->name()[nameLength - 1] == 0 && hasTerminator(desc->file(), sz - headerSize - nameLength);
+}
+
+/// A serialized block/event/value = BaseBlockData + name (terminated; values carry a '\0' stub)
+/// [+ ArbitraryValue fields and data for values].
+static bool isValidBlock(const profiler::SerializedBlock* block, uint16_t sz, profiler::BlockType type)
+{
+    if (sz <= sizeof(profiler::BaseBlockData) || !hasTerminator(block->name(), sz - sizeof(profiler::BaseBlockData)))
+        return false;
+
+    if (type == profiler::BlockType::Value)
+    {
+        if (sz < sizeof(profiler::ArbitraryValue))
+            return false;
+        const auto value = reinterpret_cast<const profiler::ArbitraryValue*>(block);
+        return value->data_size() <= sz - sizeof(profiler::ArbitraryValue);
+    }
+
+    return true;
+}
+
+static bool isValidCSwitch(const profiler::SerializedCSwitch* cs, uint16_t sz)
+{
+    return sz > sizeof(profiler::CSwitchEvent) && hasTerminator(cs->name(), sz - sizeof(profiler::CSwitchEvent));
+}
+
+//////////////////////////////////////////////////////////////////////////
+
 static bool tryReadMarker(std::istream& inStream, uint32_t& marker)
 {
     read(inStream, marker);
@@ -936,7 +1011,17 @@ extern "C" PROFILER_API profiler::block_index_t fillTreesFromStream(std::atomic<
     begin_end_time.beginTime = begin_time;
     begin_end_time.endTime = end_time;
 
-    descriptors.reserve(descriptors_count);
+    // The header sizes drive the allocations below: never trust them beyond the file size,
+    // a corrupted header could otherwise request gigabytes (std::bad_alloc -> crash).
+    const uint64_t bytes_left = remainingBytes(inStream);
+    if (descriptors_memory_size > bytes_left || memory_size > bytes_left - descriptors_memory_size)
+    {
+        _log << "File corrupted.\nMemory sizes pointed in the header exceed the file size.";
+        return 0;
+    }
+
+    // Each record takes at least its 2-byte size field: cap the reservations accordingly.
+    descriptors.reserve(static_cast<size_t>(std::min<uint64_t>(descriptors_count, bytes_left / sizeof(uint16_t))));
     //const char* olddata = append_regime ? serialized_descriptors.data() : nullptr;
     serialized_descriptors.set(descriptors_memory_size);
     //validate_pointers(progress, olddata, serialized_descriptors, descriptors, descriptors.size());
@@ -952,14 +1037,26 @@ extern "C" PROFILER_API profiler::block_index_t fillTreesFromStream(std::atomic<
             continue;
         }
 
-        //if (i + sz > descriptors_memory_size) {
-        //    printf("FILE CORRUPTED\n");
-        //    return 0;
-        //}
+        if (i + sz > descriptors_memory_size)
+        {
+            _log << "File corrupted.\nActual descriptors data size > size pointed in file.";
+            return 0;
+        }
 
         char* data = serialized_descriptors[i];
-        read(inStream, data, sz);
+        if (!readExact(inStream, data, sz))
+        {
+            _log << "File corrupted.\nUnexpected end of file while reading block descriptors.";
+            return 0;
+        }
+
         auto descriptor = reinterpret_cast<profiler::SerializedBlockDescriptor*>(data);
+        if (!isValidDescriptor(descriptor, sz))
+        {
+            _log << "File corrupted.\nBad block descriptor #" << descriptors.size() << ".";
+            return 0;
+        }
+
         descriptors.push_back(descriptor);
 
         i += sz;
@@ -973,7 +1070,8 @@ extern "C" PROFILER_API profiler::block_index_t fillTreesFromStream(std::atomic<
     PerThreadStats parent_statistics, frame_statistics;
     IdMap identification_table;
 
-    blocks.reserve(total_blocks_count);
+    blocks.reserve(static_cast<size_t>(std::min<uint64_t>(total_blocks_count,
+        (bytes_left - descriptors_memory_size) / (sizeof(uint16_t) + sizeof(profiler::BaseBlockData) + 1))));
     //olddata = append_regime ? serialized_blocks.data() : nullptr;
     serialized_blocks.set(memory_size);
     //validate_pointers(progress, olddata, serialized_blocks, blocks, blocks.size());
@@ -1011,8 +1109,15 @@ extern "C" PROFILER_API profiler::block_index_t fillTreesFromStream(std::atomic<
         if (name_size != 0)
         {
             name.resize(name_size);
-            read(inStream, name.data(), name_size);
-            root.thread_name = name.data();
+            if (!readExact(inStream, name.data(), name_size))
+            {
+                _log << "File corrupted.\nUnexpected end of file while reading a thread name.";
+                return 0;
+            }
+
+            // The name is not guaranteed to be '\0'-terminated in a corrupted file
+            const auto length = static_cast<size_t>(std::find(name.begin(), name.end(), '\0') - name.begin());
+            root.thread_name.assign(name.data(), length);
         }
 
         CsStatsMap per_thread_statistics_cs;
@@ -1041,10 +1146,19 @@ extern "C" PROFILER_API profiler::block_index_t fillTreesFromStream(std::atomic<
             }
 
             char* data = serialized_blocks[i];
-            read(inStream, data, sz);
+            if (!readExact(inStream, data, sz))
+            {
+                _log << "File corrupted.\nUnexpected end of file while reading context switches.";
+                return 0;
+            }
             i += sz;
 
             auto baseData = reinterpret_cast<profiler::SerializedCSwitch*>(data);
+            if (!isValidCSwitch(baseData, sz))
+            {
+                _log << "File corrupted.\nBad context switch record.";
+                return 0;
+            }
             auto t_begin = reinterpret_cast<profiler::timestamp_t*>(data);
             auto t_end = t_begin + 1;
 
@@ -1112,9 +1226,19 @@ extern "C" PROFILER_API profiler::block_index_t fillTreesFromStream(std::atomic<
             }
 
             char* data = serialized_blocks[i];
-            read(inStream, data, sz);
+            if (!readExact(inStream, data, sz))
+            {
+                _log << "File corrupted.\nUnexpected end of file while reading blocks.";
+                return 0;
+            }
             i += sz;
             auto baseData = reinterpret_cast<profiler::SerializedBlock*>(data);
+            if (sz <= sizeof(profiler::BaseBlockData))
+            {
+                _log << "File corrupted.\nBad block size == " << sz;
+                return 0;
+            }
+
             if (baseData->id() >= descriptors_count)
             {
                 _log << "Bad block id == " << baseData->id();
@@ -1125,6 +1249,12 @@ extern "C" PROFILER_API profiler::block_index_t fillTreesFromStream(std::atomic<
             if (desc == nullptr)
             {
                 _log << "Bad block id == " << baseData->id() << ". Description is null.";
+                return 0;
+            }
+
+            if (!isValidBlock(baseData, sz, desc->type()))
+            {
+                _log << "File corrupted.\nBad record for block \"" << desc->name() << "\".";
                 return 0;
             }
 
@@ -1303,7 +1433,11 @@ extern "C" PROFILER_API profiler::block_index_t fillTreesFromStream(std::atomic<
                 if (usedMemorySize > 0)
                 {
                     stringBuffer.resize(usedMemorySize);
-                    read(inStream, stringBuffer.data(), usedMemorySize);
+                    if (!readExact(inStream, stringBuffer.data(), usedMemorySize))
+                    {
+                        _log << "File corrupted.\nUnexpected end of file while reading bookmarks.";
+                        return 0;
+                    }
 
                     if (stringBuffer.back() != 0)
                     {
@@ -1505,7 +1639,14 @@ extern "C" PROFILER_API bool readDescriptionsFromStream(std::atomic<int>& progre
         return false;
     }
 
-    descriptors.reserve(descriptors_count);
+    const uint64_t bytes_left = remainingBytes(inStream);
+    if (descriptors_memory_size > bytes_left)
+    {
+        _log << "Descriptors memory size pointed in the header exceeds the stream size.\nFile/Stream corrupted.";
+        return false;
+    }
+
+    descriptors.reserve(static_cast<size_t>(std::min<uint64_t>(descriptors_count, bytes_left / sizeof(uint16_t))));
     //const char* olddata = append_regime ? serialized_descriptors.data() : nullptr;
     serialized_descriptors.set(descriptors_memory_size);
     //validate_pointers(progress, olddata, serialized_descriptors, descriptors, descriptors.size());
@@ -1532,8 +1673,19 @@ extern "C" PROFILER_API bool readDescriptionsFromStream(std::atomic<int>& progre
         }
 
         char* data = serialized_descriptors[i];
-        read(inStream, data, sz);
+        if (!readExact(inStream, data, sz))
+        {
+            _log << "Unexpected end of stream while reading block descriptors.\nFile/Stream corrupted.";
+            return false;
+        }
+
         auto descriptor = reinterpret_cast<profiler::SerializedBlockDescriptor*>(data);
+        if (!isValidDescriptor(descriptor, sz))
+        {
+            _log << "Bad block descriptor #" << descriptors.size() << ".\nFile/Stream corrupted.";
+            return false;
+        }
+
         descriptors.push_back(descriptor);
 
         i += sz;
