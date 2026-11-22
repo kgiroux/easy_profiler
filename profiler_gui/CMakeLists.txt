@@ -96,7 +96,7 @@ if (_easy_qt_ok)
         resources.qrc
         resources.rc
     )
-    target_link_libraries(profiler_gui Qt${QT_VERSION_MAJOR}::Widgets easy_profiler)
+    target_link_libraries(profiler_gui Qt${QT_VERSION_MAJOR}::Widgets easy_profiler $<BUILD_INTERFACE:easy_profiler_sanitizers>)
     # The GUI code uses C++17 (structured bindings). Qt6 imposes it implicitly, Qt5 does not.
     target_compile_features(profiler_gui PRIVATE cxx_std_17)
     if (WIN32)

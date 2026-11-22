@@ -186,6 +186,7 @@ set(SOURCES
 )
 
 add_library(easy_profiler ${SOURCES} resources.rc)
+target_link_libraries(easy_profiler PRIVATE $<BUILD_INTERFACE:easy_profiler_sanitizers>)
 # End adding source files.
 #################################################
 
@@ -241,14 +242,14 @@ easy_define_target_option(easy_profiler EASY_OPTION_PREDEFINED_COLORS EASY_OPTIO
 if (UNIX)
     target_compile_options(easy_profiler PRIVATE -Wall -Wno-long-long -Wno-reorder -Wno-braced-scalar-init -pedantic)
     if (NOT ANDROID AND NOT QNX)
-        target_link_libraries(easy_profiler pthread)
+        target_link_libraries(easy_profiler PUBLIC pthread)
     endif()
     if (QNX)
-        target_link_libraries(easy_profiler socket)
+        target_link_libraries(easy_profiler PUBLIC socket)
     endif()
 elseif (WIN32)
     target_compile_definitions(easy_profiler PRIVATE -D_WIN32_WINNT=0x0600 -D_CRT_SECURE_NO_WARNINGS -D_WINSOCK_DEPRECATED_NO_WARNINGS)
-    target_link_libraries(easy_profiler ws2_32 psapi)
+    target_link_libraries(easy_profiler PUBLIC ws2_32 psapi)
 endif ()
 
 if (MINGW)

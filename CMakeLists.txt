@@ -20,6 +20,24 @@ if (MSVC)
 endif ()
 
 option(EASY_PROFILER_NO_GUI "Build easy_profiler without the GUI application (required Qt)" OFF)
+option(EASY_PROFILER_ENABLE_ASAN "Instrument easy_profiler, the GUI and the tests with AddressSanitizer (development only)" OFF)
+
+# Sanitizer flags are carried by an INTERFACE target linked explicitly by each target
+# (wrapped in $<BUILD_INTERFACE:...> so that it never leaks into the installed package).
+add_library(easy_profiler_sanitizers INTERFACE)
+if (EASY_PROFILER_ENABLE_ASAN)
+    if (CMAKE_VERSION VERSION_LESS "3.13")
+        message(FATAL_ERROR "EASY_PROFILER_ENABLE_ASAN requires CMake >= 3.13")
+    endif ()
+    if (MSVC)
+        target_compile_options(easy_profiler_sanitizers INTERFACE /fsanitize=address /Zi)
+        target_link_options(easy_profiler_sanitizers INTERFACE /INCREMENTAL:NO /DEBUG)
+    else ()
+        target_compile_options(easy_profiler_sanitizers INTERFACE -fsanitize=address,undefined -fno-omit-frame-pointer -g)
+        target_link_options(easy_profiler_sanitizers INTERFACE -fsanitize=address,undefined)
+    endif ()
+    message(STATUS "AddressSanitizer enabled")
+endif ()
 
 set(EASY_PROGRAM_VERSION_MAJOR 2)
 set(EASY_PROGRAM_VERSION_MINOR 1)
@@ -48,6 +66,12 @@ if (NOT EASY_PROFILER_NO_GUI)
     add_subdirectory(profiler_gui)
 endif()
 add_subdirectory(easy_profiler_converter)
+
+option(EASY_PROFILER_BUILD_TESTS "Build easy_profiler unit tests (GoogleTest)" OFF)
+if (EASY_PROFILER_BUILD_TESTS)
+    enable_testing()
+    add_subdirectory(tests)
+endif ()
 
 if (NOT EASY_PROFILER_NO_SAMPLES)
     add_subdirectory(sample)
