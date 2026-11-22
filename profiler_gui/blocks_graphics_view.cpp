@@ -82,6 +82,7 @@
 
 #include "arbitrary_value_tooltip.h"
 #include "blocks_graphics_view.h"
+#include "min_scale.h"
 #include "bookmarks_editor.h"
 #include "graphics_block_item.h"
 #include "graphics_ruler_item.h"
@@ -2097,13 +2098,14 @@ void BlocksGraphicsView::calculateMinScale()
         if (root.children.empty()) {
             continue;
         }
-        const auto threadDuration = easyBlock(root.children.back()).tree.node->end() - easyBlock(root.children.front()).tree.node->begin();
-        threadMaxDuration = std::max(threadMaxDuration, threadDuration);
+        const auto threadBegin = easyBlock(root.children.front()).tree.node->begin();
+        const auto threadEnd = easyBlock(root.children.back()).tree.node->end();
+        if (threadEnd > threadBegin) // guard against unsigned underflow
+            threadMaxDuration = std::max(threadMaxDuration, threadEnd - threadBegin);
     }
-    // Every 10 step is equal to x10 in max time in thread view
-    // Formulae for correct coefficient is: log10(desired_max_time) = x/10 + 30
-    const auto scalePower = 10.0*log(threadMaxDuration*1.10/1e9)/log(10.0) + 30.0;
-    m_minScale = pow(profiler_gui::SCALING_COEFFICIENT_INV, scalePower);
+    // Every 10 steps is x10 in max time in thread view (see computeMinScale()).
+    // A 0 ns duration (e.g. capture with only EASY_EVENTs) used to give log(0) -> infinite scale.
+    m_minScale = profiler_gui::computeMinScale(threadMaxDuration, profiler_gui::SCALING_COEFFICIENT_INV, MIN_SCALE, MAX_SCALE);
 }
 
 void BlocksGraphicsView::initMode()

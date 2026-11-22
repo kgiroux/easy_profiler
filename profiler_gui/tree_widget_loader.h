@@ -111,6 +111,7 @@ class TreeWidgetLoader Q_DECL_FINAL
     std::atomic_bool   m_bInterrupt; ///<
     std::atomic<int>     m_progress; ///<
     TreeMode                 m_mode; ///<
+    size_t              m_plainRows = 0; ///< Rows created so far by the per-frame builder (worker thread only)
 
 public:
 
@@ -139,6 +140,7 @@ private:
     bool interrupted() const volatile;
     void setDone();
     void setProgress(int _progress);
+    void setRowsLimitError(size_t _actualCount, size_t _maxCount, bool _isLowerBound);
 
     void setTreeInternalTop(
         const profiler::timestamp_t& _beginTime,
@@ -181,7 +183,8 @@ private:
         bool _addZeroBlocks,
         bool _decoratedThreadNames,
         bool _hexThreadId,
-        ::profiler_gui::TimeUnits _units
+        ::profiler_gui::TimeUnits _units,
+        size_t _maxCount
     );
 
     size_t setTreeInternalPlain(

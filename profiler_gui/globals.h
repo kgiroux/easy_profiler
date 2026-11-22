@@ -218,7 +218,7 @@ namespace profiler_gui {
         ::profiler::block_id_t         selected_block_id; ///< Current selected profiler block id
         uint32_t                                 version; ///< Opened file version (files may have different format)
 
-        uint32_t                          max_rows_count; ///< Maximum blocks count for the StatsTree widget for the full call-stack mode
+        uint32_t                          max_rows_count; ///< Maximum rows count for the StatsTree widget (call-stack and per-frame modes)
 
         float                                 frame_time; ///< Expected frame time value in microseconds to be displayed at minimap on graphics scrollbar
         int                               blocks_spacing; ///< Minimum blocks spacing on diagram

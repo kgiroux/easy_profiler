@@ -248,6 +248,25 @@ void TreeWidgetLoader::setProgress(int _progress)
     m_progress.store(_progress, std::memory_order_release);
 }
 
+void TreeWidgetLoader::setRowsLimitError(size_t _actualCount, size_t _maxCount, bool _isLowerBound)
+{
+    // When the build was stopped early, only a lower bound of the rows count is known:
+    // a percentage of the limit would be meaningless (always ~100%).
+    const QString actual = _isLowerBound
+        ? QStringLiteral("more than %1").arg(profiler_gui::shortenCountString(static_cast<uint64_t>(_maxCount)))
+        : QStringLiteral("%1 (%2%)").arg(profiler_gui::shortenCountString(static_cast<uint64_t>(_actualCount)))
+                                    .arg(profiler_gui::percent(_actualCount, _maxCount));
+
+    m_error = QString(
+        "Exceeded maximum rows count = %1.\n"
+        "Actual rows count: %2.\n"
+        "Please, reduce selected area width\n"
+        "or increase maximum count in settings\n"
+        "or change the tree mode."
+    ).arg(profiler_gui::shortenCountString(static_cast<uint64_t>(_maxCount)))
+        .arg(actual);
+}
+
 bool TreeWidgetLoader::interrupted() const volatile
 {
     return m_bInterrupt.load(std::memory_order_acquire);
@@ -363,7 +382,8 @@ void TreeWidgetLoader::fillTreeBlocks(
                     zeroBlocks,
                     decoratedNames,
                     hexThreadIds,
-                    timeUnits
+                    timeUnits,
+                    maxCount
                 );
                 break;
             }
@@ -444,15 +464,7 @@ void TreeWidgetLoader::setTreeInternalTop(
 
     if (total_count > _maxCount)
     {
-        m_error = QString(
-            "Exceeded maximum rows count = %1.\n"
-            "Actual rows count: %2 (%3%).\n"
-            "Please, reduce selected area width\n"
-            "or increase maximum count in settings\n"
-            "or change the tree mode."
-        ).arg(profiler_gui::shortenCountString(static_cast<uint64_t>(_maxCount)))
-            .arg(profiler_gui::shortenCountString(total_count))
-            .arg(profiler_gui::percent(total_count, _maxCount));
+        setRowsLimitError(total_count, _maxCount, false);
         setDone();
         return;
     }
@@ -652,10 +664,27 @@ void TreeWidgetLoader::setTreeInternalPlainTop(
     bool _addZeroBlocks,
     bool _decoratedThreadNames,
     bool _hexThreadId,
-    profiler_gui::TimeUnits _units
+    profiler_gui::TimeUnits _units,
+    size_t _maxCount
 ) {
     BeginEndIndicesMap beginEndMap;
     ThreadDataMap threadsMap;
+
+    // Per-frame mode creates one row per frame and per block id: on a dense real-time capture
+    // (thousands of frames) the row count was unbounded, unlike the call-stack mode.
+    // Rows are counted as they are created and the build stops once the limit is exceeded.
+    m_plainRows = 0;
+    const auto rowsLimitExceeded = [&]() -> bool {
+        if (m_plainRows <= _maxCount)
+            return false;
+        for (auto& thread : threadsMap)
+            delete thread.second.item; // a thread item owns all its rows
+        threadsMap.clear();
+        m_items.clear();
+        setRowsLimitError(m_plainRows, _maxCount, true);
+        setDone();
+        return true;
+    };
 
     const auto u_thread = profiler_gui::toUnicode("thread");
     int i = 0, total = static_cast<int>(_blocks.size());
@@ -794,6 +823,7 @@ void TreeWidgetLoader::setTreeInternalPlainTop(
 
         auto item = new TreeWidgetItem(block.tree, thread_item);
         item->setPartial(partial);
+        ++m_plainRows;
 
         iditems[tree.node->id()] = std::make_pair(item, 0);
 
@@ -852,6 +882,7 @@ void TreeWidgetLoader::setTreeInternalPlainTop(
             if (partial && children_items_number == 0)
             {
                 delete item;
+                --m_plainRows;
                 iditems.clear();
                 setProgress((95 * ++i) / total);
                 continue;
@@ -859,6 +890,9 @@ void TreeWidgetLoader::setTreeInternalPlainTop(
         }
 
         iditems.clear();
+
+        if (rowsLimitExceeded())
+            return;
 
         int percentage = 100;
         auto self_duration = duration - children_duration;
@@ -1474,6 +1508,7 @@ size_t TreeWidgetLoader::setTreeInternalPlain(
         const auto idleTime = calculateIdleTime(threadRoot, firstCswitch, startTime, endTime);
 
         auto item = new TreeWidgetItem(child_index, root);
+        ++m_plainRows;
 
         auto name = *child.node->name() != 0 ? child.node->name() : desc.name();
         item->setText(COL_NAME, profiler_gui::toUnicode(name));
@@ -1521,6 +1556,7 @@ size_t TreeWidgetLoader::setTreeInternalPlain(
             if (partial && children_items_number == 0)
             {
                 delete item;
+                --m_plainRows;
                 iditems.erase(child.node->id());
                 continue;
             }
